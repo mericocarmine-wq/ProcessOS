@@ -11,6 +11,7 @@ class DiscoveryRecord:
     city: str | None = None
     email: str | None = None
     external_id: str | None = None
+    source_url: str | None = None
 
 
 def normalize_domain(value: str | None) -> str | None:

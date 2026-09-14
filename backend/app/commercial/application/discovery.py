@@ -32,6 +32,13 @@ class WebsiteFetcher(Protocol):
     async def fetch(self, url: str) -> FetchedPage: ...
 
 
+class DiscoveryProvider(Protocol):
+    @property
+    def code(self) -> str: ...
+
+    async def search(self, sector: str, city: str, limit: int) -> list[DiscoveryRecord]: ...
+
+
 @dataclass(frozen=True, slots=True)
 class DiscoveryOutcome:
     job: DiscoveryJob
@@ -44,10 +51,12 @@ class DiscoveryService:
         repository: SqlAlchemyCommercialRepository,
         identity: AuthenticatedIdentity,
         fetcher: WebsiteFetcher,
+        providers: dict[str, DiscoveryProvider] | None = None,
     ) -> None:
         self._repository = repository
         self._identity = identity
         self._fetcher = fetcher
+        self._providers = providers or {}
 
     def _authorize(self, permission: str) -> None:
         if permission not in self._identity.permissions:
@@ -107,6 +116,7 @@ class DiscoveryService:
                         company_id=company.id,
                         provider=provider,
                         external_id=record.external_id,
+                        source_url=record.source_url,
                     )
                 )
                 self._repository.add(
@@ -128,6 +138,16 @@ class DiscoveryService:
         self._repository.record("commercial.discovery_completed", "discovery_job", job.id)
         await self._repository.commit()
         return DiscoveryOutcome(job, created)
+
+    async def search(
+        self, provider_code: str, sector: str, city: str, limit: int
+    ) -> DiscoveryOutcome:
+        self._authorize("commercial.write")
+        provider = self._providers.get(provider_code)
+        if provider is None:
+            raise ValueError("Discovery provider is not available")
+        records = await provider.search(sector, city, limit)
+        return await self.import_records(records, provider.code)
 
     async def research(self, company_id: UUID) -> ResearchJob:
         self._authorize("commercial.write")

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Annotated, NoReturn
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,11 @@ from app.commercial.application.service import (
 from app.commercial.domain.discovery import DiscoveryRecord
 from app.commercial.domain.enums import PIPELINE_ORDER, CallOutcome, PipelineStage
 from app.commercial.domain.rules import CommercialRuleViolation
+from app.commercial.infrastructure.overpass import (
+    SECTOR_FILTERS,
+    DiscoveryProviderError,
+    OverpassDiscoveryProvider,
+)
 from app.commercial.infrastructure.web_fetcher import SafeWebsiteFetcher
 from app.commercial.persistence.models import Company
 from app.commercial.persistence.repository import SqlAlchemyCommercialRepository
@@ -118,10 +123,19 @@ def build_commercial(session: Session, identity: CurrentIdentity) -> CommercialS
 Commercial = Annotated[CommercialService, Depends(build_commercial)]
 
 
-def build_discovery(session: Session, identity: CurrentIdentity) -> DiscoveryService:
+def build_discovery(
+    session: Session, identity: CurrentIdentity, request: Request
+) -> DiscoveryService:
     context = OrganizationContext(identity.organization_id, identity.user_id)
     return DiscoveryService(
-        SqlAlchemyCommercialRepository(session, context), identity, SafeWebsiteFetcher()
+        SqlAlchemyCommercialRepository(session, context),
+        identity,
+        SafeWebsiteFetcher(),
+        providers={
+            "openstreetmap": OverpassDiscoveryProvider(
+                endpoints=tuple(str(url) for url in request.app.state.settings.overpass_endpoints)
+            )
+        },
     )
 
 
@@ -172,6 +186,13 @@ class EvidenceResponse(BaseModel):
     observed: dict[str, object]
     hypotheses: dict[str, object]
     signals: list[SignalResponse]
+
+
+class DiscoverySearchRequest(BaseModel):
+    provider: str = Field(default="openstreetmap", pattern=r"^[a-z0-9_-]+$", max_length=30)
+    sector: str = Field(min_length=2, max_length=50)
+    city: str = Field(min_length=2, max_length=100)
+    limit: int = Field(default=30, ge=1, le=100)
 
 
 def raise_commercial_error(exc: Exception) -> NoReturn:
@@ -278,6 +299,44 @@ async def import_discovery(
         outcome = await discovery.import_records(records, payload.provider)
         return DiscoveryJobResponse.model_validate(outcome.job, from_attributes=True)
     except (CommercialAuthorizationError, CommercialNotFoundError) as exc:
+        raise_commercial_error(exc)
+
+
+@router.get("/discovery/sectors", response_model=dict[str, str])
+async def discovery_sectors(identity: CurrentIdentity) -> dict[str, str]:
+    if "commercial.read" not in identity.permissions:
+        raise HTTPException(status_code=403, detail="Missing permission")
+    labels = {
+        "accounting": "Asesorías y contabilidad",
+        "car_repair": "Talleres de vehículos",
+        "clinic": "Clínicas y consultas",
+        "construction": "Construcción",
+        "hairdresser": "Peluquerías",
+        "hotel": "Hoteles y alojamientos",
+        "law": "Despachos jurídicos",
+        "real_estate": "Inmobiliarias",
+        "restaurant": "Restauración",
+    }
+    return {code: labels[code] for code in SECTOR_FILTERS}
+
+
+@router.post("/discovery/search", response_model=DiscoveryJobResponse, status_code=201)
+async def search_discovery(
+    payload: DiscoverySearchRequest, discovery: Discovery
+) -> DiscoveryJobResponse:
+    try:
+        outcome = await discovery.search(
+            payload.provider, payload.sector, payload.city, payload.limit
+        )
+        return DiscoveryJobResponse.model_validate(outcome.job, from_attributes=True)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except DiscoveryProviderError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="OpenStreetMap is temporarily unavailable; retry the search later",
+        ) from exc
+    except CommercialAuthorizationError as exc:
         raise_commercial_error(exc)
 
 

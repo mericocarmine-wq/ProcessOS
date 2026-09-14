@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.commercial.application.discovery import DiscoveryService
 from app.commercial.domain.discovery import DiscoveryRecord, is_public_address, normalize_domain
 from app.commercial.domain.research import FetchedPage, analyze_website
+from app.commercial.infrastructure.overpass import OverpassDiscoveryProvider
 from app.commercial.persistence.repository import SqlAlchemyCommercialRepository
 from app.core.application.auth import AuthenticatedIdentity
 from app.core.domain.context import OrganizationContext
@@ -20,6 +21,21 @@ class FakeFetcher:
         )
 
 
+class FakeDiscoveryProvider:
+    code = "openstreetmap"
+
+    async def search(self, sector: str, city: str, limit: int) -> list[DiscoveryRecord]:
+        return [
+            DiscoveryRecord(
+                name=f"Asesoría {city}",
+                domain="asesoria.example",
+                city=city,
+                external_id="node/42",
+                source_url="https://www.openstreetmap.org/node/42",
+            )
+        ][:limit]
+
+
 def test_normalization_and_ssrf_rules() -> None:
     assert normalize_domain("https://WWW.Example.com/path") == "example.com"
     assert not is_public_address("127.0.0.1")
@@ -32,6 +48,13 @@ def test_research_separates_observation_from_hypothesis() -> None:
     assert result.observed["has_form"] is True
     assert result.hypotheses["automation_opportunity"]
     assert all(signal[1] in {"detected", "not_detected"} for signal in result.signals)
+
+
+def test_overpass_query_is_bounded_and_escapes_location() -> None:
+    query = OverpassDiscoveryProvider()._query("accounting", 'Madrid"', 500)
+    assert "out tags center 100" in query
+    assert 'Madrid\\"' in query
+    assert '["office"="accountant"]' in query
 
 
 async def test_discovery_deduplicates_and_researches_without_external_provider() -> None:
@@ -58,16 +81,16 @@ async def test_discovery_deduplicates_and_researches_without_external_provider()
             SqlAlchemyCommercialRepository(session, OrganizationContext(organization.id, actor.id)),
             identity,
             FakeFetcher(),
+            providers={"openstreetmap": FakeDiscoveryProvider()},
         )
+        discovered = await service.search("openstreetmap", "accounting", "Madrid", 10)
         outcome = await service.import_records(
-            [
-                DiscoveryRecord("Acme", "www.acme.example", city="Madrid"),
-                DiscoveryRecord("ACME", "https://acme.example", city="Madrid"),
-            ]
+            [DiscoveryRecord("ACME", "https://asesoria.example", city="Madrid")]
         )
-        job = await service.research(outcome.companies[0].id)
-        analysis, signals = await service.evidence(outcome.companies[0].id)
-    assert outcome.job.created_count == 1
+        job = await service.research(discovered.companies[0].id)
+        analysis, signals = await service.evidence(discovered.companies[0].id)
+    assert discovered.job.created_count == 1
+    assert outcome.job.created_count == 0
     assert outcome.job.duplicate_count == 1
     assert job.status == "completed"
     assert analysis and analysis.observed["has_whatsapp"] is True

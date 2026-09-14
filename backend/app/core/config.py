@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     cors_origins: list[AnyHttpUrl] = Field(
         default_factory=lambda: [AnyHttpUrl("http://localhost:3000")]
     )
+    overpass_endpoints: list[AnyHttpUrl] = Field(
+        default_factory=lambda: [
+            AnyHttpUrl("https://overpass.kumi.systems/api/interpreter"),
+            AnyHttpUrl("https://overpass-api.de/api/interpreter"),
+        ]
+    )
 
     @model_validator(mode="after")
     def reject_development_secret_in_production(self) -> "Settings":

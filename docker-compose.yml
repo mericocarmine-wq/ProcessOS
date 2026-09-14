@@ -25,6 +25,7 @@ services:
       PROCESSOS_DATABASE_URL: ${PROCESSOS_DATABASE_URL:-postgresql+asyncpg://processos:processos@db:5432/processos}
       PROCESSOS_JWT_SECRET: ${PROCESSOS_JWT_SECRET:-development-only-secret-change-before-use}
       PROCESSOS_CORS_ORIGINS: '${PROCESSOS_CORS_ORIGINS:-["http://localhost:3000"]}'
+      PROCESSOS_OVERPASS_ENDPOINTS: '${PROCESSOS_OVERPASS_ENDPOINTS:-["https://overpass.kumi.systems/api/interpreter","https://overpass-api.de/api/interpreter"]}'
     ports:
       - "8000:8000"
     volumes:
