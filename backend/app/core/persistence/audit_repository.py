@@ -21,4 +21,3 @@ class SqlAlchemyAuditEventRepository:
             .order_by(AuditEvent.created_at.desc())
         )
         return tuple((await self._session.scalars(statement)).all())
-

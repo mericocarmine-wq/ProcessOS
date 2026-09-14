@@ -37,7 +37,9 @@ class Settings(BaseSettings):
     smtp_username: str | None = None
     smtp_password: SecretStr | None = Field(default=None, repr=False)
     smtp_from: str | None = None
-    cors_origins: list[AnyHttpUrl] = Field(default_factory=lambda: [AnyHttpUrl("http://localhost:3000")])
+    cors_origins: list[AnyHttpUrl] = Field(
+        default_factory=lambda: [AnyHttpUrl("http://localhost:3000")]
+    )
 
     @model_validator(mode="after")
     def reject_development_secret_in_production(self) -> "Settings":

@@ -65,4 +65,3 @@ class SqlAlchemyAppRepository:
 
     async def commit(self) -> None:
         await self._session.commit()
-

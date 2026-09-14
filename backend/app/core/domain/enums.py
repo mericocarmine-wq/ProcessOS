@@ -17,4 +17,3 @@ class AuditResult(StrEnum):
     SUCCESS = "success"
     DENIED = "denied"
     FAILURE = "failure"
-

@@ -8,4 +8,3 @@ class OrganizationContext:
 
     organization_id: UUID
     actor_id: UUID
-

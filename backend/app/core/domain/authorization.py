@@ -9,16 +9,25 @@ PERMISSIONS: dict[str, str] = {
     "audit.read": "View audit events",
     "features.read": "View feature flags",
     "features.manage": "Manage feature flags",
+    "commercial.read": "View commercial CRM records",
+    "commercial.write": "Create and update commercial CRM records",
 }
 
 ROLE_PERMISSIONS: dict[MembershipRole, frozenset[str]] = {
     MembershipRole.OWNER: frozenset(PERMISSIONS),
     MembershipRole.ADMIN: frozenset(PERMISSIONS),
     MembershipRole.MANAGER: frozenset(
-        {"apps.read", "members.read", "audit.read", "features.read"}
+        {
+            "apps.read",
+            "members.read",
+            "audit.read",
+            "features.read",
+            "commercial.read",
+            "commercial.write",
+        }
     ),
-    MembershipRole.EMPLOYEE: frozenset({"apps.read"}),
-    MembershipRole.VIEWER: frozenset({"apps.read", "features.read"}),
+    MembershipRole.EMPLOYEE: frozenset({"apps.read", "commercial.read", "commercial.write"}),
+    MembershipRole.VIEWER: frozenset({"apps.read", "features.read", "commercial.read"}),
     MembershipRole.ACCOUNTANT: frozenset({"apps.read"}),
     MembershipRole.TAX_ADVISOR: frozenset({"apps.read"}),
     MembershipRole.PAYROLL: frozenset({"apps.read"}),

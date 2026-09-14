@@ -1,0 +1,1 @@
+"""Commercial persistence adapters."""

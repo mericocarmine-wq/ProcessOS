@@ -10,4 +10,3 @@ class TenantScopedRepository[T](Protocol):
     context: OrganizationContext
 
     async def list(self) -> Sequence[T]: ...
-

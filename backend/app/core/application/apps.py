@@ -54,4 +54,3 @@ class AppLauncherService:
             enabled=enabled,
         )
         await self._repository.commit()
-

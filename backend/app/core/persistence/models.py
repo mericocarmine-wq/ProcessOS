@@ -147,16 +147,12 @@ class Notification(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class AuditEvent(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "core_audit_events"
-    __table_args__ = (
-        Index("ix_core_audit_events_org_created", "organization_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_core_audit_events_org_created", "organization_id", "created_at"),)
 
     organization_id: Mapped[UUID] = mapped_column(
         ForeignKey("core_organizations.id", ondelete="RESTRICT"), nullable=False
     )
-    actor_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("core_users.id", ondelete="SET NULL")
-    )
+    actor_id: Mapped[UUID | None] = mapped_column(ForeignKey("core_users.id", ondelete="SET NULL"))
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     resource_type: Mapped[str] = mapped_column(String(100), nullable=False)
     resource_id: Mapped[str | None] = mapped_column(String(100))

@@ -73,9 +73,7 @@ class SqlAlchemyAuthRepository:
         roles = []
         for role_name in MembershipRole:
             role = Role(organization_id=organization.id, name=role_name.value)
-            role.permissions = [
-                permissions_by_code[code] for code in ROLE_PERMISSIONS[role_name]
-            ]
+            role.permissions = [permissions_by_code[code] for code in ROLE_PERMISSIONS[role_name]]
             roles.append(role)
         self._session.add_all(roles)
         await self._session.flush()

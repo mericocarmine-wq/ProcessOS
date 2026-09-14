@@ -193,8 +193,7 @@ class AuthService:
             PasswordResetToken(
                 user_id=user.id,
                 token_hash=hash_token(raw_token),
-                expires_at=datetime.now(UTC)
-                + timedelta(minutes=self._password_reset_minutes),
+                expires_at=datetime.now(UTC) + timedelta(minutes=self._password_reset_minutes),
             )
         )
         await self._repository.commit()
