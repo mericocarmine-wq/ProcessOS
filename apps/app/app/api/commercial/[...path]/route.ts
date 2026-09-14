@@ -13,6 +13,13 @@ async function proxy(request: Request, context: RouteContext) {
   const body = method === "GET" ? undefined : await request.text();
   const response = await callBackend(`/commercial/${suffix}`, { method, body }, true);
   if (response.status === 204) return new NextResponse(null, { status: 204 });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    return NextResponse.json(
+      { detail: "El servicio comercial no pudo completar la operación." },
+      { status: response.status },
+    );
+  }
   return NextResponse.json(await response.json(), { status: response.status });
 }
 
