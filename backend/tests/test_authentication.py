@@ -1,16 +1,25 @@
 from datetime import UTC, datetime
+from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 import pytest
 from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.core.application.auth import AuthenticationError, AuthService
+from app.core.application.auth import AuthenticationError, AuthService, InvalidRecoveryTokenError
 from app.core.config import Settings
 from app.core.persistence.auth_repository import SqlAlchemyAuthRepository
 from app.core.persistence.base import Base
 from app.core.persistence.models import AuthSession, Organization
 from app.core.security import TokenService, hash_token
+
+
+class CapturingRecoveryDelivery:
+    def __init__(self) -> None:
+        self.reset_url: str | None = None
+
+    async def send(self, *, email: str, reset_url: str) -> None:
+        self.reset_url = reset_url
 
 
 async def test_session_lifecycle_and_tenant_claim_validation() -> None:
@@ -102,5 +111,55 @@ async def test_invalid_password_does_not_issue_session() -> None:
                 password=uuid4().hex,
                 organization_slug="tenant-a",
             )
+
+    await engine.dispose()
+
+
+async def test_password_reset_is_single_use_and_revokes_sessions() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    settings = Settings(
+        environment="test",
+        jwt_secret=SecretStr("test-secret-that-is-longer-than-thirty-two-characters"),
+    )
+    delivery = CapturingRecoveryDelivery()
+    original_credential = f"Original-{uuid4()}!"
+    new_credential = f"Replacement-{uuid4()}!"
+
+    async with sessions() as session:
+        service = AuthService(
+            SqlAlchemyAuthRepository(session),
+            TokenService(settings),
+            recovery_delivery=delivery,
+        )
+        await service.register_owner(
+            email="recovery@example.com",
+            password=original_credential,
+            organization_name="Recovery Tenant",
+            organization_slug="recovery-tenant",
+        )
+        issued = await service.login(
+            email="recovery@example.com",
+            password=original_credential,
+            organization_slug="recovery-tenant",
+        )
+        await service.request_password_reset("recovery@example.com")
+        assert delivery.reset_url is not None
+        raw_token = parse_qs(urlparse(delivery.reset_url).query)["token"][0]
+
+        await service.reset_password(raw_token, new_credential)
+        with pytest.raises(AuthenticationError):
+            await service.authenticate(issued.access_token)
+        with pytest.raises(InvalidRecoveryTokenError):
+            await service.reset_password(raw_token, new_credential)
+
+        replacement = await service.login(
+            email="recovery@example.com",
+            password=new_credential,
+            organization_slug="recovery-tenant",
+        )
+        assert replacement.access_token
 
     await engine.dispose()

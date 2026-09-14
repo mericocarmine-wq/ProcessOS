@@ -80,6 +80,51 @@ async def test_register_login_me_and_logout_api_flow() -> None:
         )
         assert disable_core.status_code == 409
 
+        second_registration = await client.post(
+            "/auth/register",
+            json={
+                "email": "second-owner@example.com",
+                "password": f"Second-{uuid4()}!",
+                "organization_name": "Tenant B",
+                "organization_slug": "tenant-b",
+            },
+        )
+        assert second_registration.status_code == 201
+        add_member = await client.post(
+            "/core/members",
+            headers=headers,
+            json={"email": "second-owner@example.com", "role": "viewer"},
+        )
+        assert add_member.status_code == 201
+        members = await client.get("/core/members", headers=headers)
+        assert members.status_code == 200
+        assert {member["email"] for member in members.json()} == {
+            "owner@example.com",
+            "second-owner@example.com",
+        }
+        owner_membership = next(
+            member for member in members.json() if member["email"] == "owner@example.com"
+        )
+        last_owner_change = await client.patch(
+            f"/core/members/{owner_membership['id']}/role",
+            headers=headers,
+            json={"role": "manager"},
+        )
+        assert last_owner_change.status_code == 409
+
+        flag_update = await client.put(
+            "/core/feature-flags/new-dashboard",
+            headers=headers,
+            json={"enabled": True},
+        )
+        assert flag_update.status_code == 204
+        flags = await client.get("/core/feature-flags", headers=headers)
+        assert flags.json() == [{"key": "new-dashboard", "enabled": True}]
+
+        audit_events = await client.get("/core/audit-events", headers=headers)
+        assert audit_events.status_code == 200
+        assert any(event["action"] == "membership.created" for event in audit_events.json())
+
         logout = await client.post("/auth/logout", headers=headers)
         assert logout.status_code == 204
         assert (await client.get("/auth/me", headers=headers)).status_code == 401

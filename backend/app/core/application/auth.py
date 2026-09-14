@@ -1,10 +1,19 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from secrets import token_urlsafe
+from urllib.parse import urlencode
 from uuid import UUID, uuid4
 
 from app.core.exceptions import ProcessOSError
 from app.core.persistence.auth_repository import SqlAlchemyAuthRepository
-from app.core.persistence.models import AuditEvent, AuthSession, Organization, User
+from app.core.persistence.models import (
+    AuditEvent,
+    AuthSession,
+    Organization,
+    PasswordResetToken,
+    User,
+)
+from app.core.ports import PasswordResetDelivery
 from app.core.security import (
     InvalidTokenError,
     TokenService,
@@ -13,12 +22,22 @@ from app.core.security import (
     verify_password,
 )
 
+_LOCAL_RESET_URL = "http://localhost:3001/reset-password"
+
 
 class AuthenticationError(ProcessOSError):
     pass
 
 
 class AccountConflictError(ProcessOSError):
+    pass
+
+
+class RecoveryUnavailableError(ProcessOSError):
+    pass
+
+
+class InvalidRecoveryTokenError(ProcessOSError):
     pass
 
 
@@ -41,9 +60,19 @@ class IssuedToken:
 
 
 class AuthService:
-    def __init__(self, repository: SqlAlchemyAuthRepository, tokens: TokenService) -> None:
+    def __init__(
+        self,
+        repository: SqlAlchemyAuthRepository,
+        tokens: TokenService,
+        recovery_delivery: PasswordResetDelivery | None = None,
+        password_reset_minutes: int = 30,
+        password_reset_base_url: str | None = None,
+    ) -> None:
         self._repository = repository
         self._tokens = tokens
+        self._recovery_delivery = recovery_delivery
+        self._password_reset_minutes = password_reset_minutes
+        self._password_reset_base_url = password_reset_base_url or _LOCAL_RESET_URL
 
     async def register_owner(
         self, *, email: str, password: str, organization_name: str, organization_slug: str
@@ -150,4 +179,32 @@ class AuthService:
                 result="success",
             )
         )
+        await self._repository.commit()
+
+    async def request_password_reset(self, email: str) -> None:
+        if self._recovery_delivery is None:
+            raise RecoveryUnavailableError("Password recovery is not configured")
+        user = await self._repository.find_user_by_email(email)
+        if user is None:
+            return
+        raw_token = token_urlsafe(32)
+        await self._repository.invalidate_password_resets(user.id)
+        self._repository.add_password_reset(
+            PasswordResetToken(
+                user_id=user.id,
+                token_hash=hash_token(raw_token),
+                expires_at=datetime.now(UTC)
+                + timedelta(minutes=self._password_reset_minutes),
+            )
+        )
+        await self._repository.commit()
+        reset_url = f"{self._password_reset_base_url}?{urlencode({'token': raw_token})}"
+        await self._recovery_delivery.send(email=user.email, reset_url=reset_url)
+
+    async def reset_password(self, token: str, new_password: str) -> None:
+        consumed = await self._repository.consume_password_reset(
+            hash_token(token), hash_password(new_password)
+        )
+        if not consumed:
+            raise InvalidRecoveryTokenError("Reset token is invalid or expired")
         await self._repository.commit()

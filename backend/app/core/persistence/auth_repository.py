@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import select, update
@@ -14,6 +15,7 @@ from app.core.persistence.models import (
     Membership,
     Organization,
     OrganizationApplication,
+    PasswordResetToken,
     Permission,
     Role,
     User,
@@ -173,6 +175,69 @@ class SqlAlchemyAuthRepository:
             .values(revoked_at=datetime.now(UTC))
         )
         await self._session.execute(statement)
+
+    async def find_user_by_email(self, email: str) -> User | None:
+        return cast(
+            User | None,
+            await self._session.scalar(
+                select(User).where(User.email == email, User.is_active.is_(True))
+            ),
+        )
+
+    async def invalidate_password_resets(self, user_id: UUID) -> None:
+        await self._session.execute(
+            update(PasswordResetToken)
+            .where(
+                PasswordResetToken.user_id == user_id,
+                PasswordResetToken.used_at.is_(None),
+            )
+            .values(used_at=datetime.now(UTC))
+        )
+
+    def add_password_reset(self, reset: PasswordResetToken) -> None:
+        self._session.add(reset)
+
+    async def consume_password_reset(self, token_hash: str, password_hash: str) -> bool:
+        now = datetime.now(UTC)
+        reset = await self._session.scalar(
+            select(PasswordResetToken).where(
+                PasswordResetToken.token_hash == token_hash,
+                PasswordResetToken.used_at.is_(None),
+                PasswordResetToken.expires_at > now,
+            )
+        )
+        if reset is None:
+            return False
+        user = await self._session.get(User, reset.user_id)
+        if user is None or not user.is_active:
+            return False
+        user.password_hash = password_hash
+        reset.used_at = now
+        await self._session.execute(
+            update(AuthSession)
+            .where(AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None))
+            .values(revoked_at=now)
+        )
+        memberships = (
+            await self._session.scalars(
+                select(Membership).where(
+                    Membership.user_id == user.id,
+                    Membership.is_active.is_(True),
+                )
+            )
+        ).all()
+        for membership in memberships:
+            self.add_audit_event(
+                AuditEvent(
+                    organization_id=membership.organization_id,
+                    actor_id=user.id,
+                    action="identity.password_reset",
+                    resource_type="user",
+                    resource_id=str(user.id),
+                    result="success",
+                )
+            )
+        return True
 
     async def commit(self) -> None:
         await self._session.commit()

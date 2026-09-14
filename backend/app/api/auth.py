@@ -12,7 +12,10 @@ from app.core.application.auth import (
     AuthenticatedIdentity,
     AuthenticationError,
     AuthService,
+    InvalidRecoveryTokenError,
+    RecoveryUnavailableError,
 )
+from app.core.email import SmtpPasswordResetDelivery
 from app.core.persistence.auth_repository import SqlAlchemyAuthRepository
 from app.core.security import TokenService
 
@@ -53,11 +56,32 @@ class IdentityResponse(BaseModel):
     permissions: list[str]
 
 
+class PasswordRecoveryRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetRequest(BaseModel):
+    token: str = Field(min_length=32, max_length=256)
+    new_password: str = Field(min_length=12, max_length=128)
+
+
 Session = Annotated[AsyncSession, Depends(get_session)]
 
 
 def build_auth_service(session: Session, request: Request) -> AuthService:
-    return AuthService(SqlAlchemyAuthRepository(session), TokenService(request.app.state.settings))
+    settings = request.app.state.settings
+    delivery = None
+    if all(
+        [settings.smtp_host, settings.smtp_username, settings.smtp_password, settings.smtp_from]
+    ):
+        delivery = SmtpPasswordResetDelivery(settings)
+    return AuthService(
+        SqlAlchemyAuthRepository(session),
+        TokenService(settings),
+        recovery_delivery=delivery,
+        password_reset_minutes=settings.password_reset_minutes,
+        password_reset_base_url=str(settings.password_reset_base_url),
+    )
 
 
 Auth = Annotated[AuthService, Depends(build_auth_service)]
@@ -126,3 +150,22 @@ async def me(identity: CurrentIdentity) -> IdentityResponse:
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(identity: CurrentIdentity, auth: Auth) -> None:
     await auth.logout(identity)
+
+
+@router.post("/password-recovery", status_code=status.HTTP_202_ACCEPTED)
+async def request_password_recovery(payload: PasswordRecoveryRequest, auth: Auth) -> None:
+    try:
+        await auth.request_password_reset(str(payload.email).lower())
+    except RecoveryUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/password-reset", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_password(payload: PasswordResetRequest, auth: Auth) -> None:
+    try:
+        await auth.reset_password(payload.token, payload.new_password)
+    except InvalidRecoveryTokenError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     jwt_issuer: str = "processos-api"
     jwt_audience: str = "processos-app"
     access_token_minutes: int = Field(default=30, ge=5, le=120)
+    password_reset_minutes: int = Field(default=30, ge=10, le=120)
+    password_reset_base_url: AnyHttpUrl = AnyHttpUrl("http://localhost:3001/reset-password")
+    smtp_host: str | None = None
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = Field(default=None, repr=False)
+    smtp_from: str | None = None
     cors_origins: list[AnyHttpUrl] = Field(default_factory=lambda: [AnyHttpUrl("http://localhost:3000")])
 
     @model_validator(mode="after")
@@ -39,6 +46,10 @@ class Settings(BaseSettings):
             and self.jwt_secret.get_secret_value() == "development-only-secret-change-before-use"
         ):
             raise ValueError("PROCESSOS_JWT_SECRET must be set in production")
+        if self.environment == "production" and not all(
+            [self.smtp_host, self.smtp_username, self.smtp_password, self.smtp_from]
+        ):
+            raise ValueError("SMTP settings must be configured in production")
         return self
 
 
