@@ -4,9 +4,8 @@ import { describe, expect, it } from "vitest";
 import Home from "./page";
 
 describe("Home", () => {
-  it("communicates the ProcessOS foundation", () => {
+  it("communicates the audit purpose", () => {
     render(<Home />);
-    expect(screen.getByRole("heading", { name: "ProcessOS" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Conoce mejor tu empresa" })).toBeInTheDocument();
   });
 });
-

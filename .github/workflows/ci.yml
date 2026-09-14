@@ -25,18 +25,21 @@ jobs:
       - run: mypy app tests
       - run: pytest
 
-  web:
+  frontends:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        frontend: [app, web]
     defaults:
       run:
-        working-directory: apps/web
+        working-directory: apps/${{ matrix.frontend }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: apps/web/package-lock.json
+          cache-dependency-path: apps/${{ matrix.frontend }}/package-lock.json
       - run: npm ci
       - run: npm run check
 
@@ -47,4 +50,3 @@ jobs:
       - run: cp .env.example .env
       - run: docker compose config --quiet
       - run: docker compose build
-

@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Auditoría ProcessOS",
-  description: "Entorno seguro para evaluar los procesos de tu empresa.",
+  title: "ProcessOS Commercial",
+  description: "Control comercial interno de ProcessOS.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
