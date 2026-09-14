@@ -42,8 +42,9 @@ class Settings(BaseSettings):
     )
     overpass_endpoints: list[AnyHttpUrl] = Field(
         default_factory=lambda: [
-            AnyHttpUrl("https://overpass.kumi.systems/api/interpreter"),
+            AnyHttpUrl("https://overpass.private.coffee/api/interpreter"),
             AnyHttpUrl("https://overpass-api.de/api/interpreter"),
+            AnyHttpUrl("https://maps.mail.ru/osm/tools/overpass/api/interpreter"),
         ]
     )
 

@@ -6,8 +6,9 @@ import httpx
 from app.commercial.domain.discovery import DiscoveryRecord
 
 DEFAULT_OVERPASS_ENDPOINTS = (
-    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
     "https://overpass-api.de/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 )
 MAX_RESULTS = 100
 
