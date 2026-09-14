@@ -2,7 +2,7 @@
 
 Business Operating System modular y multi-tenant para autónomos y pymes.
 
-El repositorio se encuentra en la **Fase 1 — ProcessOS Core**. Incluye identidad, sesiones,
+La **Fase 1 — ProcessOS Core está completada**. Incluye identidad, sesiones,
 organizaciones, RBAC, aislamiento multi-tenant y App Launcher; todavía no contiene lógica de los
 dominios comerciales o de servicio.
 
@@ -39,8 +39,14 @@ Servicios:
 - `POST /auth/login`: emite una sesión revocable acotada a una membresía.
 - `GET /auth/me`: devuelve identidad, organización, rol y permisos efectivos.
 - `POST /auth/logout`: revoca la sesión actual.
+- `POST /auth/password-recovery`: genera y entrega un enlace temporal si SMTP está configurado.
+- `POST /auth/password-reset`: consume una sola vez el token y revoca sesiones anteriores.
 - `GET /core/apps`: devuelve únicamente las aplicaciones habilitadas.
 - `PUT /core/apps/{code}`: modifica una aplicación si existe `apps.manage`.
+- `GET|POST /core/members`: consulta y añade membresías dentro del tenant actual.
+- `PATCH /core/members/{id}/role`: cambia roles sin permitir degradar al último propietario.
+- `GET|PUT /core/feature-flags/{key}`: administra flags por organización.
+- `GET /core/audit-events`: consulta los últimos eventos del tenant actual.
 
 ## Validación
 
