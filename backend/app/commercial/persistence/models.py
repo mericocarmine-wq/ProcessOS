@@ -1,7 +1,17 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.persistence.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -120,3 +130,88 @@ class Campaign(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     status: Mapped[str] = mapped_column(String(30), default="draft", nullable=False)
+
+
+class DiscoveryJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "commercial_discovery_jobs"
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("core_organizations.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    campaign_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("commercial_campaigns.id", ondelete="SET NULL")
+    )
+    source_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    processed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    duplicate_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+class CompanySource(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "commercial_company_sources"
+    __table_args__ = (UniqueConstraint("organization_id", "provider", "external_id"),)
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("core_organizations.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        ForeignKey("commercial_companies.id", ondelete="CASCADE"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    external_id: Mapped[str | None] = mapped_column(String(255))
+    source_url: Mapped[str | None] = mapped_column(String(2048))
+
+
+class ResearchJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "commercial_research_jobs"
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("core_organizations.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        ForeignKey("commercial_companies.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(80))
+
+
+class WebsiteAnalysis(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "commercial_website_analyses"
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("core_organizations.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        ForeignKey("commercial_companies.id", ondelete="CASCADE"), nullable=False
+    )
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    title: Mapped[str | None] = mapped_column(String(500))
+    observed: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
+    hypotheses: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
+
+
+class ReviewAnalysis(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "commercial_review_analyses"
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("core_organizations.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        ForeignKey("commercial_companies.id", ondelete="CASCADE"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    observed: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
+    hypotheses: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
+
+
+class Signal(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "commercial_signals"
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("core_organizations.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        ForeignKey("commercial_companies.id", ondelete="CASCADE"), nullable=False
+    )
+    code: Mapped[str] = mapped_column(String(80), nullable=False)
+    evidence_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    value: Mapped[str] = mapped_column(String(500), nullable=False)
+    confidence: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_url: Mapped[str | None] = mapped_column(String(2048))

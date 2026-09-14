@@ -6,7 +6,17 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.commercial.persistence.models import Activity, Call, Company, Opportunity
+from app.commercial.persistence.models import (
+    Activity,
+    Call,
+    Company,
+    CompanySource,
+    DiscoveryJob,
+    Opportunity,
+    ResearchJob,
+    Signal,
+    WebsiteAnalysis,
+)
 from app.core.domain.context import OrganizationContext
 from app.core.persistence.models import AuditEvent
 
@@ -45,6 +55,98 @@ class SqlAlchemyCommercialRepository:
                 select(Opportunity).where(
                     Opportunity.company_id == company_id,
                     Opportunity.organization_id == self._context.organization_id,
+                )
+            ),
+        )
+
+    async def find_duplicate(
+        self,
+        *,
+        domain: str | None,
+        phone: str | None,
+        name: str,
+        city: str | None,
+        provider: str,
+        external_id: str | None,
+    ) -> Company | None:
+        conditions = []
+        if domain:
+            conditions.append(Company.domain == domain)
+        if phone:
+            conditions.append(Company.phone == phone)
+        if city:
+            conditions.append(
+                (func.lower(Company.name) == name) & (func.lower(Company.city) == city.lower())
+            )
+        if external_id:
+            source_company = await self._session.scalar(
+                select(CompanySource.company_id).where(
+                    CompanySource.organization_id == self._context.organization_id,
+                    CompanySource.provider == provider,
+                    CompanySource.external_id == external_id,
+                )
+            )
+            if source_company:
+                conditions.append(Company.id == source_company)
+        if not conditions:
+            return None
+        from sqlalchemy import or_
+
+        return cast(
+            Company | None,
+            await self._session.scalar(
+                select(Company).where(
+                    Company.organization_id == self._context.organization_id,
+                    or_(*conditions),
+                )
+            ),
+        )
+
+    async def latest_research(self, company_id: UUID) -> WebsiteAnalysis | None:
+        return cast(
+            WebsiteAnalysis | None,
+            await self._session.scalar(
+                select(WebsiteAnalysis)
+                .where(
+                    WebsiteAnalysis.organization_id == self._context.organization_id,
+                    WebsiteAnalysis.company_id == company_id,
+                )
+                .order_by(WebsiteAnalysis.created_at.desc())
+            ),
+        )
+
+    async def list_signals(self, company_id: UUID) -> list[Signal]:
+        return list(
+            (
+                await self._session.scalars(
+                    select(Signal)
+                    .where(
+                        Signal.organization_id == self._context.organization_id,
+                        Signal.company_id == company_id,
+                    )
+                    .order_by(Signal.created_at.desc())
+                )
+            ).all()
+        )
+
+    async def list_discovery_jobs(self) -> list[DiscoveryJob]:
+        return list(
+            (
+                await self._session.scalars(
+                    select(DiscoveryJob)
+                    .where(DiscoveryJob.organization_id == self._context.organization_id)
+                    .order_by(DiscoveryJob.created_at.desc())
+                )
+            ).all()
+        )
+
+    async def get_research_job(self, job_id: UUID) -> ResearchJob | None:
+        return cast(
+            ResearchJob | None,
+            await self._session.scalar(
+                select(ResearchJob).where(
+                    ResearchJob.id == job_id,
+                    ResearchJob.organization_id == self._context.organization_id,
                 )
             ),
         )
