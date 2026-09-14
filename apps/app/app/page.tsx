@@ -78,9 +78,16 @@ export default function Home() {
   async function searchCompanies(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setSearching(true); setError("");
     const data = new FormData(event.currentTarget);
-    const response = await fetch("/api/commercial/discovery/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: "openstreetmap", sector: data.get("sector"), city: data.get("city"), limit: Number(data.get("limit")) }) });
-    if (!response.ok) { const problem = await response.json(); setError(problem.detail || "La fuente no respondió."); setSearching(false); return; }
-    await loadCommercial(); setSearching(false);
+    try {
+      const response = await fetch("/api/commercial/discovery/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: "openstreetmap", sector: data.get("sector"), city: data.get("city"), limit: Number(data.get("limit")) }), signal: AbortSignal.timeout(45_000) });
+      const problem = await response.json().catch(() => ({ detail: "Respuesta externa no válida." }));
+      if (!response.ok) { setError(problem.detail || "La fuente no respondió."); return; }
+      await loadCommercial();
+    } catch {
+      setError("La búsqueda ha agotado el tiempo. Puedes volver a intentarlo.");
+    } finally {
+      setSearching(false);
+    }
   }
 
   async function logout() { await fetch("/api/session/logout", { method: "POST" }); setIdentity(null); setCompanies([]); }
