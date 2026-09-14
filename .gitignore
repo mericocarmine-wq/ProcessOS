@@ -1,0 +1,29 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+.next/
+coverage/
+playwright-report/
+test-results/
+
+# Build and runtime
+dist/
+build/
+*.log
+
