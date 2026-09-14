@@ -74,4 +74,10 @@ dt { color: #9fb0c5; } dd { margin: 0; }
 .timeline i { width: .65rem; height: .65rem; border-radius: 50%; background: #34d399; margin-top: .25rem; }
 .timeline article div { display: grid; gap: .3rem; } .timeline time { color: #8296ad; font-size: .8rem; }
 .empty { color: #8296ad; padding: 1rem 0; }
-@media (max-width: 800px) { .crm-shell { grid-template-columns: 1fr; } .sidebar { position: static; height: auto; } .sidebar nav { grid-template-columns: repeat(4,1fr); margin-top: 1rem; } .account { display: none; } .metrics { grid-template-columns: repeat(2,1fr); } .split, .detail-grid { grid-template-columns: 1fr; } .action-list a { grid-template-columns: 1fr; } }
+.job-list article { display: grid; grid-template-columns: 1fr repeat(3,auto); gap: 1rem; padding: 1rem 0; border-top: 1px solid #20334a; }
+.job-list article div { display: grid; } .job-list small, .job-list span { color: #9fb0c5; font-size: .8rem; }
+.research-button { margin-top: 1rem; } button:disabled { opacity: .5; cursor: not-allowed; }
+.evidence article { display: grid; grid-template-columns: 1fr auto auto; gap: 1rem; padding: .7rem 0; border-top: 1px solid #20334a; }
+.evidence article strong { text-transform: capitalize; } .evidence article span, .evidence article small { color: #9fb0c5; }
+.evidence aside { margin-top: 1rem; padding: 1rem; border-left: 3px solid #fbbf24; background: #251e0c; color: #fde68a; }
+@media (max-width: 800px) { .crm-shell { grid-template-columns: 1fr; } .sidebar { position: static; height: auto; } .sidebar nav { grid-template-columns: repeat(5,1fr); margin-top: 1rem; overflow-x: auto; } .account { display: none; } .metrics { grid-template-columns: repeat(2,1fr); } .split, .detail-grid { grid-template-columns: 1fr; } .action-list a, .job-list article { grid-template-columns: 1fr; } }
