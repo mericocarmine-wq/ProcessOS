@@ -19,6 +19,9 @@ El CRM interno puede recibir campañas de empresas, normalizar y deduplicar regi
 - Fallos de investigación aislados en su propio ResearchJob mediante códigos seguros.
 - Trazabilidad de importaciones, fuentes, research, señales y eventos de auditoría.
 - Vista Discovery, historial de jobs, importación CSV e investigación desde Empresa 360.
+- Búsqueda directa por sector, municipio y límite mediante OpenStreetMap/Overpass.
+- Taxonomía inicial de nueve sectores y normalización de resultados OSM.
+- Conmutación entre endpoints Overpass configurables y atribución ODbL visible.
 
 ## Evidencias
 
@@ -30,7 +33,8 @@ El CRM interno puede recibir campañas de empresas, normalizar y deduplicar regi
 - `next build`: correcto.
 - Alembic/PostgreSQL: revisión `c91f4e72a630 (head)` aplicada y sin diferencias de esquema.
 - Smoke HTTP: login `200`; primera importación creó 1 empresa; segunda importación normalizada creó 0 y detectó 1 duplicada.
+- El contrato del conector Overpass está probado con proveedor inyectado. Las instancias públicas externas agotaron su timeout durante la validación local; la API lo aísla y devuelve `503` recuperable sin crear datos parciales.
 
 ## Pendiente deliberado
 
-Los conectores de directorios, buscadores, OpenStreetMap y fuentes sectoriales se incorporarán como adaptadores adicionales cuando se definan proveedor, condiciones de uso y límites operativos. El envío de auditorías permanece manual hasta completar la Fase 3.
+Los conectores de directorios, buscadores y fuentes sectoriales se incorporarán como adaptadores adicionales cuando se definan proveedor, condiciones de uso y límites operativos. Para volumen sostenido de OpenStreetMap se deberá contratar o desplegar una instancia propia de Overpass. El envío de auditorías permanece manual hasta completar la Fase 3.
