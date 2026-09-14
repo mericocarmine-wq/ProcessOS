@@ -23,6 +23,7 @@ services:
       PROCESSOS_ENVIRONMENT: ${PROCESSOS_ENVIRONMENT:-development}
       PROCESSOS_LOG_LEVEL: ${PROCESSOS_LOG_LEVEL:-INFO}
       PROCESSOS_DATABASE_URL: ${PROCESSOS_DATABASE_URL:-postgresql+asyncpg://processos:processos@db:5432/processos}
+      PROCESSOS_JWT_SECRET: ${PROCESSOS_JWT_SECRET:-development-only-secret-change-before-use}
       PROCESSOS_CORS_ORIGINS: '${PROCESSOS_CORS_ORIGINS:-["http://localhost:3000"]}'
     ports:
       - "8000:8000"
