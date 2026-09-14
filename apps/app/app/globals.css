@@ -1,15 +1,27 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: dark;
-  font-family: Arial, Helvetica, sans-serif;
-}
-
+:root { color-scheme: dark; font-family: Arial, Helvetica, sans-serif; }
 * { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  background: #07111f;
-  color: #f8fafc;
-}
+body { margin: 0; min-height: 100vh; background: #07111f; color: #f8fafc; }
+button, input { font: inherit; }
+.shell { min-height: 100vh; padding: 2rem; background: radial-gradient(circle at 80% 5%, #12334a 0, transparent 35%); }
+.brand { font-weight: 800; letter-spacing: -.03em; }
+.brand span, .eyebrow { color: #34d399; }
+.panel { width: min(100%, 54rem); margin: 12vh auto 0; padding: clamp(1.5rem, 5vw, 3rem); border: 1px solid #20334a; border-radius: 1.5rem; background: rgba(10, 25, 43, .86); box-shadow: 0 24px 80px rgba(0,0,0,.25); }
+.login-panel { max-width: 30rem; }
+.eyebrow { margin: 0 0 .5rem; text-transform: uppercase; letter-spacing: .14em; font-size: .75rem; font-weight: 800; }
+h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.5rem); letter-spacing: -.05em; }
+.muted { color: #9fb0c5; line-height: 1.6; }
+form { display: grid; gap: 1rem; margin: 2rem 0 1rem; }
+label { display: grid; gap: .45rem; color: #d9e2ee; font-size: .9rem; }
+input { width: 100%; padding: .8rem .9rem; border: 1px solid #314761; border-radius: .7rem; background: #07111f; color: white; }
+input:focus { outline: 2px solid #34d399; outline-offset: 2px; }
+button { padding: .85rem 1rem; border: 0; border-radius: .7rem; background: #34d399; color: #032016; font-weight: 800; cursor: pointer; }
+button.secondary { background: #182a3e; color: white; }
+a { color: #67e8f9; }
+.error { color: #fca5a5; }
+.dashboard { display: grid; grid-template-columns: 1fr auto; gap: 2rem; }
+.apps { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 1rem; }
+.apps article { display: grid; gap: .5rem; padding: 1.25rem; border: 1px solid #29415b; border-radius: 1rem; background: #0b1c30; }
+.apps small { color: #8296ad; }
+@media (max-width: 40rem) { .shell { padding: 1rem; } .panel { margin-top: 8vh; } .dashboard { grid-template-columns: 1fr; } .apps { grid-column: auto; } }
