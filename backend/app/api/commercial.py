@@ -334,7 +334,11 @@ async def search_discovery(
     except DiscoveryProviderError as exc:
         raise HTTPException(
             status_code=503,
-            detail="OpenStreetMap is temporarily unavailable; retry the search later",
+            detail=(
+                "La fuente de empresas no está disponible en este momento. "
+                "No se han importado resultados parciales. "
+                "Puedes importar un CSV propio mientras se recupera el proveedor."
+            ),
         ) from exc
     except CommercialAuthorizationError as exc:
         raise_commercial_error(exc)

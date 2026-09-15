@@ -51,9 +51,10 @@ def test_research_separates_observation_from_hypothesis() -> None:
 
 
 def test_overpass_query_is_bounded_and_escapes_location() -> None:
-    query = OverpassDiscoveryProvider()._query("accounting", 'Madrid"', 500)
+    query = OverpassDiscoveryProvider()._query("accounting", 40.416782, -3.703507, 500)
     assert "out tags center 100" in query
-    assert 'Madrid\\"' in query
+    assert "area" not in query
+    assert "40.371866,-3.762502,40.461698,-3.644512" in query
     assert '["office"="accountant"]' in query
 
 

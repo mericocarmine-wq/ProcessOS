@@ -1,4 +1,8 @@
 import asyncio
+import logging
+import math
+import time
+from collections import OrderedDict
 from dataclasses import dataclass
 
 import httpx
@@ -6,11 +10,13 @@ import httpx
 from app.commercial.domain.discovery import DiscoveryRecord
 
 DEFAULT_OVERPASS_ENDPOINTS = (
-    "https://overpass.private.coffee/api/interpreter",
     "https://overpass-api.de/api/interpreter",
-    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
 )
 MAX_RESULTS = 100
+logger = logging.getLogger(__name__)
+# Public source data only; never cache organization records or credentials.
+_cache: OrderedDict[tuple[tuple[str, ...], str], tuple[float, dict[str, object]]] = OrderedDict()
 
 SECTOR_FILTERS: dict[str, tuple[tuple[str, str], ...]] = {
     "accounting": (("office", "accountant"), ("office", "tax_advisor")),
@@ -31,7 +37,8 @@ class DiscoveryProviderError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class OverpassDiscoveryProvider:
-    timeout_seconds: float = 18.0
+    timeout_seconds: float = 12.0
+    total_timeout_seconds: float = 35.0
     endpoints: tuple[str, ...] = DEFAULT_OVERPASS_ENDPOINTS
 
     @property
@@ -42,28 +49,99 @@ class OverpassDiscoveryProvider:
     def _escape(value: str) -> str:
         return value.replace("\\", "\\\\").replace('"', '\\"')
 
-    def _query(self, sector: str, city: str, limit: int) -> str:
+    def _query(self, sector: str, latitude: float, longitude: float, limit: int) -> str:
         filters = SECTOR_FILTERS.get(sector)
         if filters is None:
             raise ValueError("Unsupported sector")
-        area = self._escape(city.strip())
+        # A 10 x 10 km viewport, not an expensive global administrative-area lookup.
+        delta_lat = 5 / 111.32
+        delta_lon = 5 / (111.32 * math.cos(math.radians(latitude)))
+        bounds = (
+            f"{latitude - delta_lat:.6f},{longitude - delta_lon:.6f},"
+            f"{latitude + delta_lat:.6f},{longitude + delta_lon:.6f}"
+        )
         selectors = "\n".join(
-            f'nwr["{key}"="{value}"]["name"](area.searchArea);' for key, value in filters
+            f'nwr["{key}"="{value}"]["name"]({bounds});' for key, value in filters
         )
-        return (
-            f'[out:json][timeout:20];area["name"="{area}"]'
-            '["boundary"="administrative"]["admin_level"="8"]->.searchArea;('
-            f"{selectors});out tags center {min(limit, MAX_RESULTS)};"
+        return f"[out:json][timeout:8];({selectors});out tags center {min(limit, MAX_RESULTS)};"
+
+    async def _locate(self, city: str) -> tuple[float, float]:
+        parts = city.strip().split(",")
+        if len(parts) == 2:
+            try:
+                latitude, longitude = map(float, parts)
+            except ValueError as exc:
+                raise ValueError("Introduce un nombre de localidad o latitud,longitud.") from exc
+            if not (-85 <= latitude <= 85 and -179 <= longitude <= 179):
+                raise ValueError("Coordenadas fuera del rango admitido.")
+            return latitude, longitude
+        query = (
+            '[out:json][timeout:8];node["place"~"^(city|town|village)$"]'
+            f'["name"="{self._escape(city.strip())}"];out body 100;'
         )
+        payload = await self._fetch(query)
+        elements = payload["elements"]
+        assert isinstance(elements, list)
+        # Prefer cities over towns/villages; do not arbitrarily choose equal-rank homonyms.
+        for kind in ("city", "town", "village"):
+            matches = [
+                e
+                for e in elements
+                if isinstance(e, dict)
+                and isinstance(e.get("tags"), dict)
+                and e["tags"].get("place") == kind
+            ]
+            if len(matches) > 1 or len(elements) >= 100:
+                raise ValueError("Hay varias localidades con ese nombre. Usa latitud,longitud.")
+            if matches:
+                try:
+                    latitude, longitude = float(matches[0]["lat"]), float(matches[0]["lon"])
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise DiscoveryProviderError(
+                        "Invalid location coordinates from source"
+                    ) from exc
+                if not (-85 <= latitude <= 85 and -179 <= longitude <= 179):
+                    raise ValueError("Localidad fuera del rango geográfico admitido.")
+                return latitude, longitude
+        raise ValueError("No se encontró la localidad. Revisa el nombre o usa latitud,longitud.")
+
+    async def _fetch(self, query: str) -> dict[str, object]:
+        key = (self.endpoints, query)
+        cached = _cache.get(key)
+        if cached and cached[0] > time.monotonic():
+            _cache.move_to_end(key)
+            return cached[1]
+        last_error: Exception | None = None
+        for endpoint in self.endpoints:
+            try:
+                payload = await self._fetch_endpoint(endpoint, query)
+                _cache[key] = (time.monotonic() + 600, payload)
+                _cache.move_to_end(key)
+                while len(_cache) > 128:
+                    _cache.popitem(last=False)
+                return payload
+            except (httpx.HTTPError, ValueError, KeyError) as exc:
+                last_error = exc
+                logger.warning(
+                    "discovery_provider_failed endpoint=%s error=%s status=%s",
+                    endpoint,
+                    type(exc).__name__,
+                    exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None,
+                )
+        raise DiscoveryProviderError("OpenStreetMap discovery failed") from last_error
 
     async def _fetch_endpoint(self, endpoint: str, query: str) -> dict[str, object]:
         async with httpx.AsyncClient(
             timeout=self.timeout_seconds,
-            headers={"User-Agent": "ProcessOS-Commercial/1.0 (internal discovery)"},
+            headers={"User-Agent": "ProcessOS/1.0"},
         ) as client:
             response = await client.get(endpoint, params={"data": query})
             response.raise_for_status()
             payload: dict[str, object] = response.json()
+            if not isinstance(payload, dict) or payload.get("remark"):
+                raise ValueError("Overpass returned an incomplete or failed query")
+            if not isinstance(payload.get("elements"), list):
+                raise ValueError("Invalid Overpass response")
             return payload
 
     @staticmethod
@@ -97,23 +175,12 @@ class OverpassDiscoveryProvider:
         return records
 
     async def search(self, sector: str, city: str, limit: int) -> list[DiscoveryRecord]:
-        query = self._query(sector, city, limit)
-        last_error: Exception | None = None
-        tasks = [
-            asyncio.create_task(self._fetch_endpoint(endpoint, query))
-            for endpoint in self.endpoints
-        ]
+        if sector not in SECTOR_FILTERS or not 1 <= limit <= MAX_RESULTS:
+            raise ValueError("Sector o límite de resultados no válido.")
         try:
-            for completed in asyncio.as_completed(tasks, timeout=self.timeout_seconds + 1):
-                try:
-                    return self._records(await completed, city, limit)
-                except (httpx.HTTPError, ValueError, KeyError) as exc:
-                    last_error = exc
+            async with asyncio.timeout(self.total_timeout_seconds):
+                latitude, longitude = await self._locate(city)
+                payload = await self._fetch(self._query(sector, latitude, longitude, limit))
+                return self._records(payload, city, limit)
         except TimeoutError as exc:
-            last_error = exc
-        finally:
-            for task in tasks:
-                if not task.done():
-                    task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
-        raise DiscoveryProviderError("OpenStreetMap discovery failed") from last_error
+            raise DiscoveryProviderError("Discovery time budget exceeded") from exc
